@@ -1,1 +1,3 @@
-# Docker-Owncloud
+# Docker-ownCloud
+
+ownCloud + NGINX(PHP-FPM) on CentOS
