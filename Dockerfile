@@ -1,4 +1,4 @@
-FROM centos
+FROM centos:6.4
 
 MAINTAINER Reiji Kobayashi
 
@@ -6,10 +6,6 @@ EXPOSE 80 443
 
 # yum update
 RUN yum update -y
-
-# Set Locale
-RUN echo LANG="en_US.UTF-8" > /etc/sysconfig/i18n
-RUN source /etc/sysconfig/i18n
 
 # Install [wget, vim]
 RUN yum install -y wget vim
@@ -22,22 +18,10 @@ RUN \
   /etc/yum.repos.d/isv:ownCloud:community.repo
 ADD yum.repos.d/nginx.repo /etc/yum.repos.d/nginx.repo
 
-# Install ownCloud
-RUN yum install -y --enablerepo=remi owncloud
+# Install ownCloud and php-fpm
+RUN yum install -y --enablerepo=remi owncloud php-fpm
 
-# Install and Configure nginx
-RUN yum install -y --enablerepo=nginx nginx
-RUN rm -rf /etc/nginx/conf.d/default.conf
-ADD nginx/nginx.conf    /etc/nginx/nginx.conf
-ADD nginx/owncloud.conf /etc/nginx/conf.d/owncloud.conf
-RUN echo "daemon off;" >> /etc/nginx/nginx.conf
-
-# Move ownCloud path
-RUN chown nginx. -R /var/www/html/owncloud
-RUN mv /var/www/html/owncloud /usr/share/nginx/owncloud
-
-# Install and Configure php-fpm
-RUN yum install -y --enablerepo=remi php-fpm
+# Configure php-fpm
 RUN \
   cat /etc/php-fpm.d/www.conf | \
   sed -i \
@@ -48,11 +32,27 @@ RUN \
     -e "s/nobody/nginx/g" \
     -e "s/0660/0666/g" \
     -e "s/apache/nginx/g" \
+    -e "s/\/var\/lib\/php\/session/\/var\/lib\/php\/owncloud\/session/" \
   /etc/php-fpm.d/www.conf
+
+# Install and Configure nginx
+RUN yum install -y --enablerepo=nginx nginx
+RUN rm -rf /etc/nginx/conf.d/default.conf
+ADD nginx/nginx.conf    /etc/nginx/nginx.conf
+ADD nginx/owncloud.conf /etc/nginx/conf.d/owncloud.conf
+
+# Move ownCloud path
+RUN chown nginx:nginx -R /var/www/html/owncloud
+RUN mv /var/www/html/owncloud /usr/share/nginx/owncloud
+
+# Give nginx permissions of ownCloud session path
+RUN mkdir -p /var/lib/php/owncloud/session
+RUN chown root:nginx -R /var/lib/php/owncloud/session
+RUN chmod 770 -R /var/lib/php/owncloud/session
 
 # Install and Configure supervisor
 RUN yum install -y --enablerepo=epel supervisor
 ADD supervisor/supervisord.conf /etc/supervisord.conf
 
-# Start supervisor
+# Start php-fpm and nginx via supervisor
 CMD /usr/bin/supervisord
